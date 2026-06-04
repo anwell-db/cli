@@ -1,0 +1,36 @@
+verdict() {
+	trace $CLI bundle deploy -t "$1"
+	trace print_telemetry_bool_values | grep -E "state_path|auto_migration"
+	rm out.requests.txt
+}
+
+# grant_parent <dir> <acl-json> sets permissions on a workspace folder so that folders
+# created under it during deploy observe the permissions as inherited access.
+grant_parent() {
+	$CLI workspace mkdirs "$1" >>LOG.setup 2>&1
+	oid=$($CLI workspace get-status "$1" -o json 2>>LOG.setup | jq -r .object_id)
+	$CLI workspace set-permissions directories "$oid" --json "$2" >>LOG.setup 2>&1
+}
+
+for target in \
+	shared_users_can_manage \
+	shared_not_declared \
+	shared_no_permissions \
+	user_declared \
+	user_not_declared \
+	user_no_permissions \
+	another_user_declared \
+	another_user_not_declared \
+	another_user_no_permissions \
+	workspace_other_no_permissions; do
+	verdict "$target"
+done
+
+grant_parent /Workspace/teams-declared '{"access_control_list": [{"group_name": "team", "permission_level": "CAN_MANAGE"}]}'
+verdict workspace_other_declared
+
+grant_parent /Workspace/teams-undeclared '{"access_control_list": [{"group_name": "team", "permission_level": "CAN_MANAGE"}]}'
+verdict workspace_other_not_declared
+
+grant_parent /Workspace/teams-extra "{\"access_control_list\": [{\"user_name\": \"$($CLI current-user me -o json | jq -r .userName)\", \"permission_level\": \"CAN_MANAGE\"}]}"
+verdict workspace_other_extra_current_user

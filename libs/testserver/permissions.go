@@ -3,6 +3,9 @@ package testserver
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
+	"strconv"
+	"strings"
 
 	"github.com/databricks/databricks-sdk-go/service/iam"
 )
@@ -294,7 +297,103 @@ func (s *FakeWorkspace) SetPermissions(req Request) any {
 
 	s.Permissions[responseObjectID] = existingPermissions
 
-	return Response{
-		Body: existingPermissions,
+	// Workspace folder permissions cascade to children: SetPermissions replaces the
+	// folder's direct ACL but inherited access persists. Reflect that in the response
+	// (not the stored value) so callers observe the effective ACL.
+	response := existingPermissions
+	if requestObjectType == "directories" {
+		response.AccessControlList = slices.Clone(existingPermissions.AccessControlList)
+		for _, entry := range s.inheritedDirectoryACLs(objectId) {
+			appendACLIfAbsent(&response, entry)
+		}
 	}
+
+	return Response{
+		Body: response,
+	}
+}
+
+// inheritedDirectoryACLs returns the ACL entries a directory inherits from its location:
+// the home-folder owner for a directory under /Workspace/Users/<owner>, plus the direct
+// ACL of any ancestor directory. Must be called with s.mu held.
+func (s *FakeWorkspace) inheritedDirectoryACLs(objectId string) []iam.AccessControlResponse {
+	path := s.directoryPath(objectId)
+	if path == "" {
+		return nil
+	}
+
+	var inherited []iam.AccessControlResponse
+	if owner := homeFolderOwner(path); owner != "" {
+		inherited = append(inherited, iam.AccessControlResponse{
+			UserName:       owner,
+			AllPermissions: []iam.Permission{{PermissionLevel: "CAN_MANAGE", Inherited: true}},
+		})
+	}
+	for ancestor := parentPath(path); ancestor != ""; ancestor = parentPath(ancestor) {
+		dir, ok := s.directories[ancestor]
+		if !ok {
+			continue
+		}
+		stored, ok := s.Permissions["/directories/"+strconv.FormatInt(dir.ObjectId, 10)]
+		if !ok {
+			continue
+		}
+		for _, acl := range stored.AccessControlList {
+			inherited = append(inherited, asInheritedACL(acl))
+		}
+	}
+	return inherited
+}
+
+func (s *FakeWorkspace) directoryPath(objectId string) string {
+	for path, info := range s.directories {
+		if strconv.FormatInt(info.ObjectId, 10) == objectId {
+			return path
+		}
+	}
+	return ""
+}
+
+// homeFolderOwner returns <owner> for a path under /Workspace/Users/<owner>, else "".
+func homeFolderOwner(path string) string {
+	const usersPrefix = "/Workspace/Users/"
+	if !strings.HasPrefix(path, usersPrefix) {
+		return ""
+	}
+	rest := path[len(usersPrefix):]
+	if before, _, ok := strings.Cut(rest, "/"); ok {
+		return before
+	}
+	return rest
+}
+
+func parentPath(path string) string {
+	i := strings.LastIndexByte(path, '/')
+	if i <= 0 {
+		return ""
+	}
+	return path[:i]
+}
+
+// asInheritedACL marks every permission level in the entry as inherited.
+func asInheritedACL(acl iam.AccessControlResponse) iam.AccessControlResponse {
+	perms := make([]iam.Permission, len(acl.AllPermissions))
+	for i, p := range acl.AllPermissions {
+		p.Inherited = true
+		perms[i] = p
+	}
+	acl.AllPermissions = perms
+	return acl
+}
+
+// appendACLIfAbsent appends entry only when the principal is not already present, so a
+// folder's direct ACL takes precedence over an inherited entry for the same principal.
+func appendACLIfAbsent(perms *iam.ObjectPermissions, entry iam.AccessControlResponse) {
+	key := aclPrincipalKey(entry)
+	for _, acl := range perms.AccessControlList {
+		if aclPrincipalKey(acl) == key {
+			return
+		}
+	}
+	perms.AccessControlList = append(perms.AccessControlList, entry)
 }

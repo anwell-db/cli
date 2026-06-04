@@ -66,6 +66,13 @@ func (p WorkspacePathPermissions) Compare(perms []resources.Permission) diag.Dia
 	return diags
 }
 
+// Exceeds reports whether the workspace folder grants any principal more access than
+// the declared permissions allow. Same condition as Compare, as a boolean.
+func (p WorkspacePathPermissions) Exceeds(perms []resources.Permission) bool {
+	ok, _ := containsAll(p.Permissions, perms)
+	return !ok
+}
+
 // samePrincipal checks if two permissions refer to the same user/group/service principal.
 func samePrincipal(a, b resources.Permission) bool {
 	return a.UserName == b.UserName &&

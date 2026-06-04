@@ -1,0 +1,112 @@
+bundle:
+  name: test-bundle
+
+# The deploying user is tester@databricks.com. A workspace folder under
+# /Workspace/Users/<owner> grants <owner> CAN_MANAGE, so the deploy observes that
+# inherited access in the SetPermissions response. Each target below places the
+# deployment state in a different location with different declared permissions to
+# exercise the permission-scope telemetry.
+targets:
+  # --- state in /Workspace/Shared (not synced; verdict is static) ---
+
+  # group_name: users has CAN_MANAGE, so the all-users access is declared.
+  shared_users_can_manage:
+    default: true
+    permissions:
+      - group_name: users
+        level: CAN_MANAGE
+    workspace:
+      state_path: /Workspace/Shared/test-bundle-state
+
+  # users group not granted: the all-users access is not declared.
+  shared_not_declared:
+    permissions:
+      - user_name: ${workspace.current_user.userName}
+        level: CAN_MANAGE
+    workspace:
+      state_path: /Workspace/Shared/test-bundle-state
+
+  shared_no_permissions:
+    workspace:
+      state_path: /Workspace/Shared/test-bundle-state
+
+  # --- state under the deploying user's home (the default layout) ---
+
+  # The deploying user is declared, so the inherited owner access is declared too.
+  user_declared:
+    permissions:
+      - user_name: ${workspace.current_user.userName}
+        level: CAN_MANAGE
+
+  # The deploying user is not declared, but as the folder creator they retain access.
+  # That is allowed for migration, even though it exceeds the declared permissions.
+  user_not_declared:
+    permissions:
+      - group_name: team
+        level: CAN_MANAGE
+
+  # No permissions: not synced, so the verdict is static. The state is under the
+  # deploying user's home, so it is migratable. (For no-permissions bundles the live
+  # ACL is never observed, so "match" and "not match" coincide.)
+  user_no_permissions: {}
+
+  # --- state under another user's home ---
+
+  # The other user (the home owner) is declared, so their inherited access is declared.
+  another_user_declared:
+    permissions:
+      - user_name: ${workspace.current_user.userName}
+        level: CAN_MANAGE
+      - user_name: other@example.com
+        level: CAN_MANAGE
+    workspace:
+      state_path: /Workspace/Users/other@example.com/test-bundle-state
+
+  # The other user is not declared, so their inherited access exceeds the permissions
+  # and is not the deploying user, so it is not migratable.
+  another_user_not_declared:
+    permissions:
+      - user_name: ${workspace.current_user.userName}
+        level: CAN_MANAGE
+    workspace:
+      state_path: /Workspace/Users/other@example.com/test-bundle-state
+
+  # No permissions, but the state is under another user's home: that user owns it
+  # (undeclared access), which we know statically, so it is not compatible.
+  another_user_no_permissions:
+    workspace:
+      state_path: /Workspace/Users/other@example.com/test-bundle-state
+
+  # --- state under a non-home, non-shared folder (/Workspace/<other>) ---
+  # The script grants permissions on the parent folder before deploying, so the deploy
+  # observes them as inherited access (real ACLs, not synthesized home ownership).
+
+  # No permissions and not under a user home: unknown without a GetPermissions call.
+  workspace_other_no_permissions:
+    workspace:
+      state_path: /Workspace/teams/test-bundle-state
+
+  # Parent grants group_name: team, which the bundle also declares.
+  workspace_other_declared:
+    permissions:
+      - group_name: team
+        level: CAN_MANAGE
+    workspace:
+      state_path: /Workspace/teams-declared/test-bundle-state
+
+  # Parent grants group_name: team, which the bundle does not declare.
+  workspace_other_not_declared:
+    permissions:
+      - user_name: ${workspace.current_user.userName}
+        level: CAN_MANAGE
+    workspace:
+      state_path: /Workspace/teams-undeclared/test-bundle-state
+
+  # Parent grants the deploying user, which the bundle does not declare. The state is
+  # not under the deployer's home, so the deployer exemption does not apply.
+  workspace_other_extra_current_user:
+    permissions:
+      - group_name: team
+        level: CAN_MANAGE
+    workspace:
+      state_path: /Workspace/teams-extra/test-bundle-state
