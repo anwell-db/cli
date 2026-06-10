@@ -12,6 +12,7 @@
 * Set the default `data_security_mode` to `DATA_SECURITY_MODE_AUTO` in bundle templates ([#5452](https://github.com/databricks/cli/pull/5452)).
 * Mark vector search index index_subtype as backend_default to prevent drift after deployment ([#5454](https://github.com/databricks/cli/pull/5454)).
 * `bundle deployment migrate`: handle resources added to or removed from `databricks.yml` since the last Terraform deploy ([#5463](https://github.com/databricks/cli/pull/5463)).
+* Fixed `bundle validate` creating the remote file path if it did not exist; validation no longer performs any write operations ([#5528](https://github.com/databricks/cli/pull/5528)).
 
 ### Dependency updates
 
