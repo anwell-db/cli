@@ -55,7 +55,7 @@ If an agent (you) authored or substantially helped author the PR, disclose it on
 
 ## Changelog entry
 
-Add a `NEXT_CHANGELOG.md` entry when your change is user-visible. CI generates the real `CHANGELOG.md` from `NEXT_CHANGELOG.md` at release time, so never hand-edit `CHANGELOG.md` directly.
+Add a changelog fragment under `changelog.d/` when your change is user-visible. Each PR adds its own file, so entries never conflict between PRs. CI collates the fragments and generates the real `CHANGELOG.md` at release time, so never hand-edit `CHANGELOG.md` or `NEXT_CHANGELOG.md` directly.
 
 **When to add an entry:**
 - New or changed CLI command, flag, or subcommand behavior
@@ -69,7 +69,7 @@ Add a `NEXT_CHANGELOG.md` entry when your change is user-visible. CI generates t
 - Auto-generated output changes without a corresponding user-facing change
 
 **How to add:**
-- Pick the right section (`CLI`, `Bundles`, `Dependency updates`) under the current `## Release vX.Y.Z` header.
-- One or two sentences, user-facing language, no Jira links.
-- Reference the PR number once it's open: after `gh pr create`, edit the entry to append ` (#NNNN)` or similar matching nearby entries.
-- Match the voice and tense of the existing entries in the file.
+- Create `changelog.d/<section>/<PR-number>.md`, picking the section directory that fits: `cli`, `bundles`, `dependency-updates`, `notable-changes`, or `api-changes`. Name it after the PR (e.g. `changelog.d/cli/5464.md`); a trailing slug like `5464-quickstart.md` is fine too.
+- If you don't know the PR number yet, use any name and rename the file once the PR is open — the `(#NNNN)` link is derived from the filename.
+- Write one or two sentences in user-facing language, no Jira links. The leading `* ` is optional, and don't add the PR link yourself. Match the voice and tense of existing changelog entries.
+- See `changelog.d/README.md` for details.
